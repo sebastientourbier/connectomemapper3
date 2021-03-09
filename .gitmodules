@@ -1,0 +1,3 @@
+[submodule "cmtklib/data"]
+	path = cmtklib/data
+	url = https://github.com/connectomicslab/cmtklib-data.git
