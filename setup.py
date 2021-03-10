@@ -3,11 +3,61 @@
 """`Setup.py` for Connectome Mapper 3 Graphical User Inerface (BIDS App Manager)."""
 
 import os
+import pkg_resources
 import sys
 import setuptools
 from setuptools.command.install import install
+from setuptools.command.develop import develop
+
+from datalad.api import get, drop
 
 from cmp.info import __version__
+
+
+def get_cmtklib_data_content():
+    """ Get file content of datalad dataset stored in cmtklib/data."""
+    cmtklib_data_dir = pkg_resources.resource_filename(
+            'cmtklib',
+            'data/'
+    )
+    # Get file content managed by datalad/git-annex
+    get(cmtklib_data_dir, dataset=cmtklib_data_dir, recursive=True)
+
+
+def drop_cmtklib_data_content():
+    """ Drop file content of datalad dataset stored in cmtklib/data."""
+    cmtklib_data_dir = pkg_resources.resource_filename(
+            'cmtklib',
+            'data/'
+    )
+    # Get file content managed by datalad/git-annex
+    drop(cmtklib_data_dir, dataset=cmtklib_data_dir, recursive=True)
+
+
+class PreDevelopCommand(develop):
+    """Post-installation for development mode."""
+    def run(self):
+        # PRE-INSTALL
+        print('[PRE-INSTALL] Handle datalad resources...')
+        get_cmtklib_data_content()
+        # INSTALL
+        install.run(self)
+        # POST-INSTALL
+        print('[POST-INSTALL] Clean datalad resources...')
+        drop_cmtklib_data_content()
+
+
+class PreInstallCommand(install):
+    """Post-installation for installation mode."""
+    def run(self):
+        # PRE-INSTALL
+        print('[PRE-INSTALL] Handle datalad resources...')
+        get_cmtklib_data_content()
+        # INSTALL
+        install.run(self)
+        # POST-INSTALL
+        print('[POST-INSTALL] Clean datalad resources...')
+        drop_cmtklib_data_content()
 
 
 class VerifyVersionCommand(install):
@@ -21,6 +71,7 @@ class VerifyVersionCommand(install):
         if tag != version:
             info = f'Git tag: {tag} does not match the version of this app: {version}'
             sys.exit(info)
+
 
 # Get directory where this file is located
 directory = os.path.abspath(os.path.dirname(__file__))
@@ -90,30 +141,24 @@ package_data = {'cmp':
                 }
 
 # Extract package requirements from Conda environment.yml
-include_conda_pip_dependencies = False
+include_conda_pip_dependencies = True
 install_requires = []
 dependency_links = []
 if include_conda_pip_dependencies:
-    path = os.path.join(directory, 'ubuntu16.04', 'environment.yml')
+    path = os.path.join(directory, 'environment.yml')
     with open(path) as read_file:
         state = "PREAMBLE"
         for line in read_file:
+            # Strip white space for right and left side
             line = line.rstrip().lstrip(" -")
+            # Determine if we are in the list of conda or PIP dependencies
             if line == "dependencies:":
                 state = "CONDA_DEPS"
             elif line == "pip:":
                 state = "PIP_DEPS"
-            elif state == "CONDA_DEPS":
-                line = '=='.join(line.split('='))
-                line = line.split('==')[0]
-                # Python is a valid dependency for Conda but not setuptools, so skip it
-                if "python" in line:
-                    pass
-                else:
-                    # Appends to dependencies
-                    install_requires.append(line)
-            elif state == "PIP_DEPS":
-                line = line.split('==')[0]
+            # Add PIP dependencies to list of required dependencies
+            if state == "PIP_DEPS" and "pip" not in line:
+                # line = line.split('==')[0]
                 # Appends to dependency links
                 dependency_links.append(line)
                 # Adds package name to dependencies
@@ -132,7 +177,7 @@ def main():
     # Setup configuration
     setuptools.setup(
         name='cmp',
-        version=__version__,
+        version=__version__.split('v')[-1],
         description='Connectome Mapper 3: A software pipeline for multi-scale connectome mapping of multimodal data',
         long_description=long_description,
         author='Sebastien Tourbier',
@@ -147,14 +192,13 @@ def main():
         },
         license='BSD-3-Clause',
         classifiers=[
-            'Development Status :: 4 - Beta',
+            'Development Status :: 5 - Production/Stable',
             'Intended Audience :: Science/Research',
             'Intended Audience :: Developers',
             'License :: OSI Approved',
             'Programming Language :: Python',
             'Topic :: Software Development',
             'Topic :: Scientific/Engineering',
-            'Operating System :: Microsoft :: Windows',
             'Operating System :: POSIX',
             'Operating System :: Unix',
             'Operating System :: MacOS',
@@ -171,6 +215,8 @@ def main():
         python_requires='>=3.7',
         cmdclass={
                 'verify': VerifyVersionCommand,
+                'develop': PreDevelopCommand,
+                'install': PreInstallCommand
         }
         )
 
